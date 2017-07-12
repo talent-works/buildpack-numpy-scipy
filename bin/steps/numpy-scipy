@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+# This script serves as the NumPy and SciPy build step of the
+# [**Python Buildpack**](https://github.com/heroku/heroku-buildpack-python) 
+# compiler. 
+# 
+# A [buildpack](http://devcenter.heroku.com/articles/buildpacks) is an 
+# adapter between a Python application and Heroku's runtime.
+#
+# This script is invoked by [`bin/compile`](/).
+
+source $BIN_DIR/utils
+
+VENDORED_GIT_PREFIX="https://raw.githubusercontent.com/andrewychoi/npscipy-binaries/master"
+PY_PKGS="python/lib/python2.7/site-packages"
+
+function install_binaries {
+  # Install binary dependences: BLAS, LAPACK, ATLAS, and Fortran
+  if [ -d "vendor/lib/atlas-base" ]; then
+    puts-step "Using cached binaries."
+  else
+    puts-step "Downloading BLAS/LAPACK/ATLAS/Fortran binaries."
+    # Download and extract everything into target vendor directory.
+    curl -O "${VENDORED_GIT_PREFIX}/npscipy.tar.gz"
+    tar -xzf npscipy.tar.gz &> /dev/null
+    rm -f npscipy.tar.gz
+  fi
+  set-env BLAS $(pwd)/vendor/lib/atlas-base/atlas/libblas.a
+  set-env LAPACK $(pwd)/vendor/lib/atlas-base/atlas/liblapack.a
+  set-env ATLAS $(pwd)/vendor/lib/atlas-base/libatlas.a
+  set-env LIBRARY_PATH $LIBRARY_PATH:$(pwd)/vendor/lib/atlas-base:$(pwd)/vendor/lib/atlas-base/atlas
+  set-env LD_LIBRARY_PATH $LD_LIBRARY_PATH:$(pwd)/vendor/lib/atlas-base:$(pwd)/vendor/lib/atlas-base/atlas
+}
+
+function install_prebuilt {
+  local pkg=$1
+  declare -a versions=("${!2}")
+  local install_version=""
+
+  install_version=${versions[${#versions[@]} - 1]}
+
+  # Install the package, by downloading and unzipping the prebuilt package.
+  local name="${pkg}-${install_version}"
+  puts-step "Downloading prebuilt $pkg ($install_version)"
+  curl -O "${VENDORED_GIT_PREFIX}/${name}.tar.gz" &> /dev/null
+  puts-step "Installing $pkg ($install_version)"
+  tar -xzf "${name}.tar.gz"
+  cp -a venv/* python/
+  rm -rf venv "${name}.tar.gz"
+}
+
+NUMPY_VERSIONS=(1.6.2 1.7.2 1.8.1 1.8.2 1.9.0 1.9.1)
+SCIPY_VERSIONS=(0.13.3 0.14.0)
+
+puts-step "Detected numpy/scipy in requirements.txt."
+cd .heroku
+
+install_binaries
+
+install_prebuilt "numpy" NUMPY_VERSIONS[@]
+install_prebuilt "scipy" SCIPY_VERSIONS[@]
+
+cd ..
