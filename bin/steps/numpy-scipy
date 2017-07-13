@@ -11,8 +11,8 @@
 
 source $BIN_DIR/utils
 
-VENDORED_GIT_PREFIX="https://raw.githubusercontent.com/andrewychoi/npscipy-binaries/master"
-PY_PKGS="python/lib/python2.7/site-packages"
+VENDORED_GIT_PREFIX="https://s3-us-west-2.amazonaws.com/talentworks-data/curated/production/npscipy-binaries/20170712"
+PY_PKGS="/app/.heroku/python/lib/python2.7/site-packages/"
 
 function install_binaries {
   # Install binary dependences: BLAS, LAPACK, ATLAS, and Fortran
@@ -30,9 +30,11 @@ function install_binaries {
   set-env ATLAS $(pwd)/vendor/lib/atlas-base/libatlas.a
   set-env LIBRARY_PATH $LIBRARY_PATH:$(pwd)/vendor/lib/atlas-base:$(pwd)/vendor/lib/atlas-base/atlas
   set-env LD_LIBRARY_PATH $LD_LIBRARY_PATH:$(pwd)/vendor/lib/atlas-base:$(pwd)/vendor/lib/atlas-base/atlas
+  puts-step "Done with install_binaries"
 }
 
 function install_prebuilt {
+  puts-step "Starting install_prebuilt"
   local pkg=$1
   declare -a versions=("${!2}")
   local install_version=""
@@ -44,20 +46,24 @@ function install_prebuilt {
   puts-step "Downloading prebuilt $pkg ($install_version)"
   curl -O "${VENDORED_GIT_PREFIX}/${name}.tar.gz" &> /dev/null
   puts-step "Installing $pkg ($install_version)"
-  tar -xzf "${name}.tar.gz"
-  cp -a venv/* python/
-  rm -rf venv "${name}.tar.gz"
+  mkdir -p  "$PY_PKGS" && tar xvfz "${name}.tar.gz"
+  cp -a app/.heroku/python/* /app/.heroku/python
+  rm -rf app "${name}.tar.gz"
+  puts-step "Done install_prebuilt"
 }
 
 NUMPY_VERSIONS=(1.6.2 1.7.2 1.8.1 1.8.2 1.9.0 1.9.1)
 SCIPY_VERSIONS=(0.13.3 0.14.0)
 
-puts-step "Detected numpy/scipy in requirements.txt."
-cd .heroku
+puts-step "Installing hard coded numpy and scipy versions"
+mkdir -p /app/.heroku/python
+cd /app/.heroku
 
 install_binaries
 
 install_prebuilt "numpy" NUMPY_VERSIONS[@]
 install_prebuilt "scipy" SCIPY_VERSIONS[@]
 
-cd ..
+cd $BUILD_DIR
+puts-step "Installing post numpy dependencies"
+pip install -r numpy-scipy-requirements.txt
